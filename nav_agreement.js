@@ -89,7 +89,70 @@ Navicon.nav_agreement = (function () {
         creditField.addCustomFilter(filter, "nav_credit")
     }
 
+    var saveForm = true;
+
+    //check credit
+    var checkCreditProgramm = function (creditAtt, dateAtt, creditperiodAtt) {
+        const agreementDate = dateAtt.getValue();
+        if (agreementDate == null) {
+            creditperiodAtt.setValue(null);
+            saveForm = true;
+        }
+        const programm = creditAtt.getValue();
+        if (programm == null || programm.length == 0) return;
+        const programId = programm[0].id;
+
+        Xrm.WebApi.retrieveRecord('nav_credit', programId, "?$select=nav_dateend").then(
+            function success(result) {
+                const creditDate = new Date(result.nav_dateend);
+                if (agreementDate > creditDate) {
+                    Xrm.Navigation.openAlertDialog({ text: "Срок кредитной программы истек" });
+                    saveForm = false;
+                }
+                else {
+                    var diffDate = creditDate - Date.now();
+                    var ageDate = new Date(diffDate);
+                    creditperiodAtt.setValue(Math.abs(ageDate.getUTCFullYear() - 1970));
+                    saveForm = true;
+                }
+            },
+            function (error) {
+                alert(`Error with getting credit info: ${error.message}`);
+            }
+        );
+    }
+
+    //get auto cost
+    var getAutoCost = function (auto, creditAmountAtt) {
+        if (!auto || auto.length == 0) {
+            creditAmountAtt.setValue(null);
+            return;
+        }
+        const autoId = auto[0].id;
+
+        Xrm.WebApi.retrieveRecord('nav_auto', autoId, '?$select=nav_amount,nav_used&$expand=nav_modelid($select=nav_recommendedamount)').then(
+            function success(result) {
+                let cost = 0;
+                if (result.nav_used === true) {
+                    cost = result.nav_amount;
+                } else {
+                    cost = result.nav_modelid.nav_recommendedamount;
+                }
+                creditAmountAtt.setValue(cost);
+            },
+            function (error) {
+                alert(`Error with getting auto info: ${error.message}`);
+            }
+        );
+    }
+
     return {
+        onSave: function (executionContext) {
+            if (!saveForm) {
+                executionContext.getEventArgs().preventDefault();
+            }
+        },
+
         onLoad: function (executionContext) {
             const formContext = executionContext.getFormContext();
             //controls 
@@ -100,6 +163,9 @@ Navicon.nav_agreement = (function () {
             const contactAttr = formContext.getAttribute("nav_contactid");
             const creditAtt = formContext.getAttribute("nav_creditid");
             const numberAtt = formContext.getAttribute("nav_name");
+            const dateAtt = formContext.getAttribute("nav_date");
+            const creditperiodAtt = formContext.getAttribute("nav_creditperiod");
+            const creditAmountAtt = formContext.getAttribute("nav_summa");
 
             showCreditTab(executionContext.getFormContext(), autoAttr, contactAttr, creditTab);
             showCreditTabFields(executionContext.getFormContext(), creditAtt)
@@ -108,16 +174,21 @@ Navicon.nav_agreement = (function () {
             autoAttr && autoAttr.addOnChange(function (executionContext) {
                 showCreditTab(executionContext.getFormContext(), autoAttr, contactAttr, creditTab);
                 filterCredit(autoAttr.getValue(), creditField);
+                creditAmountAtt && getAutoCost(autoAttr.getValue(), creditAmountAtt);
             });
             contactAttr && contactAttr.addOnChange(function (executionContext) {
                 showCreditTab(executionContext.getFormContext(), autoAttr, contactAttr, creditTab)
             });
             creditAtt && creditAtt.addOnChange(function (executionContext) {
                 showCreditTabFields(executionContext.getFormContext(), creditAtt);
+                checkCreditProgramm(creditAtt, dateAtt, creditperiodAtt);
             });
             numberAtt && numberAtt.addOnChange(function (executionContext) {
                 agreementValueValidation(executionContext.getFormContext());
             })
+            dateAtt && dateAtt.addOnChange(function (executionContext) {
+                checkCreditProgramm(creditAtt, dateAtt);
+            });
 
             //add filters
             autoAttr && filterCredit(autoAttr.getValue(), creditField);
