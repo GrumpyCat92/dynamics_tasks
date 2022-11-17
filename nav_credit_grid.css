@@ -1,0 +1,17 @@
+body {
+    font-family: SegoeUI-Semibold, "Segoe UI Semibold", "Segoe UI Regular", "Segoe UI"
+}
+
+thead tr td {
+    font-weight: bold;
+}
+
+span {
+    text-decoration: none;
+    color: rgb(17, 96, 183);
+    cursor: pointer;
+}
+
+h4 {
+    font-size: 20px;
+}
